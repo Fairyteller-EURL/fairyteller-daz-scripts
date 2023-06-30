@@ -1,3 +1,15 @@
+# Freebies for DAZ Studio 
+## free scripts by Fairyteller
+This repository contains useful scripts, tools and tutorials designed for DAZ Studio.
+
+
+Unless otherwise noted, all scripts are licensed under the [CC BY 4.0][cc-by] license.
+The license applies to the scripts only, not to the content they produce.
+You can use the scripts for commercial and non-commercial purposes, but you must give appropriate credit to the author.
+
+
+
+
 Shield: [![CC BY 4.0][cc-by-shield]][cc-by]
 
 This work is licensed under a

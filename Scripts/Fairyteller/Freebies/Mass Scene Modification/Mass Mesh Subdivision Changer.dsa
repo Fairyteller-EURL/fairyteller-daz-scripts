@@ -1,0 +1,226 @@
+/**
+ * Sample useful Dialog script
+ * by Esajin (Fairyteller), gladly shared with the community
+ *
+ * This script will allow you to quickly change the mesh resolution, subdivision levels and Visibility in Simulation of all nodes in the scene in one click
+ * Usage:
+ * - run the script
+ * - check that the list of nodes is correct
+ * - check the Resolution checkbox if you want to change the mesh resolution
+ * - pick a resolution from the dropdown
+ * - check the Subdivision checkbox if you want to change the subdivision levels
+ * - pick a subdivision level from the slider
+ * - pick a render subD level from the slider
+ * - check the Simulation checkbox if you want to change the Visibility in Simulation
+ * - pick a simulation visibility value from the dropdown
+ * - click Apply
+ * - check that the changes made are correct
+ * - click Close
+ *
+ * Undo (Ctrl+Z) if you don't like the result
+ */
+(function(){
+    //helper function, finds a property in a property group
+    var findProperty = function(oNode, sPropertyGroup, sPropertyName){
+        var oPropertyGroup = oNode.getPropertyGroups().findChild(sPropertyGroup);
+        if (oPropertyGroup) {
+            return oPropertyGroup.findProperty(sPropertyName, false, false);
+        }
+        return null;
+    }
+    // Converts scene data into a format that the dialog can use, also filters out nodes that don't have the required properties
+    var collectNodeProperties = function(lSelection){
+        var sPropertyGroup = 'General/Mesh Resolution';
+        var sResolutionName = 'lodlevel';
+        var sViewSubdivisionName = 'SubDIALevel';
+        var sRenderSubdivisionName = 'SubDRenderLevel';
+        var sSimulationPropertyGroup = 'Display/Simulation';
+        var sVisibleInSimulationName = 'Visible in Simulation';
+        var lEligibleNodeProperties = lSelection.map(function(oNode){
+            return {
+                node: oNode,
+                resolution: findProperty(oNode, sPropertyGroup, sResolutionName),
+                viewSubdivision: findProperty(oNode, sPropertyGroup, sViewSubdivisionName),
+                renderSubdivision: findProperty(oNode, sPropertyGroup, sRenderSubdivisionName),
+                simulationVisibility: findProperty(oNode, sSimulationPropertyGroup, sVisibleInSimulationName)
+            }
+        }).filter(function(oNodeProperties){
+            // filter out nodes that don't have all the properties
+            return oNodeProperties.resolution && oNodeProperties.viewSubdivision && oNodeProperties.renderSubdivision && oNodeProperties.simulationVisibility;
+        });
+        return lEligibleNodeProperties;
+    }
+
+    var isSubDObject = function(oNode){
+        var oObject = oNode.getObject();
+        if (oObject){
+            var oShape = oObject.getCurrentShape();
+            if(oShape){
+                var oProp = oShape.findProperty('lodlevel');
+                if(oProp && oProp.getNumItems()==1){
+                    return false;
+                }
+                return true;
+            }
+        }
+    }
+
+    var replaceSelectedNodes = function(nodes){
+        var selection = Scene.getSelectedNodeList();
+        for(var i = 0; i<selection.length;i++){
+            selection[i].select(false);
+        }
+        for(var i = 0; i<nodes.length;i++){
+            nodes[i].select(true);
+        }
+    }
+    var showDialog = function(lNodeProperties){
+        var oDialog = new DzDialog();
+        oDialog.caption = 'Select the new values to apply to all nodes in the scene';
+        var sDialogSettingsKey = oDialog.caption.replace(/ /g, "")+"Dialog";
+        var oWidget = oDialog.getWidget();
+        oWidget.objectName = sDialogSettingsKey;
+
+        oDialog.height = 640;
+        oDialog.width = 480;
+
+        var oLayout = new DzVBoxLayout(oDialog);
+        oLayout.autoAdd = true;
+        oLayout.margin = 5;
+        oLayout.spacing = 5;
+        var oResolutionGroupBox = new DzVGroupBox(oDialog);
+        oResolutionGroupBox.columns = 2;
+        var oResolutionGeneralCheckBox = new DzCheckBox(oResolutionGroupBox);
+        oResolutionGeneralCheckBox.text = 'Apply Resolution Change?';
+        oResolutionGeneralCheckBox.checked = true;
+
+
+
+        var oResolutionLabel = new DzLabel(oResolutionGroupBox);
+        oResolutionLabel.text = 'Mesh Resolution';
+
+        var oConvertToSubDCheckBox = new DzCheckBox(oResolutionGroupBox);
+        oConvertToSubDCheckBox.text = 'Convert to SubD ?';
+        oConvertToSubDCheckBox.checked = false;
+
+        var oResolutionComboBox = new DzComboBox(oResolutionGroupBox);
+        oResolutionComboBox.addItem('Base');
+        oResolutionComboBox.addItem('High Resolution');
+        oResolutionComboBox.currentItem = 1;
+        oResolutionComboBox.currentText = oResolutionComboBox.itemText(oResolutionComboBox.currentItem);
+
+
+        var oSubdivisionGroupBox = new DzVGroupBox(oDialog);
+        var oSubdivisionGeneralCheckBox = new DzCheckBox(oSubdivisionGroupBox);
+        oSubdivisionGeneralCheckBox.text = 'Apply Subdivision Level Changes?';
+        oSubdivisionGeneralCheckBox.checked = true;
+
+        oSubdivisionGroupBox.columns = 1;
+        var oViewSubdivisionIntSlider = new DzIntSlider(oSubdivisionGroupBox);
+        oViewSubdivisionIntSlider.label = 'View Subdivision Level';
+        oViewSubdivisionIntSlider.labelVisible = true;
+        oViewSubdivisionIntSlider.min = 0;
+        oViewSubdivisionIntSlider.max = 3;
+        oViewSubdivisionIntSlider.clamped = true;
+        oViewSubdivisionIntSlider.defaultValue = 1;
+        oViewSubdivisionIntSlider.value = oViewSubdivisionIntSlider.defaultValue;
+
+        var oRenderSubdivisionIntSlider = new DzIntSlider(oSubdivisionGroupBox);
+        oRenderSubdivisionIntSlider.label = 'Render modifier (0 = use view SubD, 1 = use view SubD + 1, etc)';
+        oRenderSubdivisionIntSlider.labelVisible = true;
+        oRenderSubdivisionIntSlider.min = 0;
+        oRenderSubdivisionIntSlider.max = 5;
+        oRenderSubdivisionIntSlider.clamped = true;
+        oRenderSubdivisionIntSlider.defaultValue = 1;
+        oRenderSubdivisionIntSlider.value = oRenderSubdivisionIntSlider.defaultValue;
+
+        var oSimulationGroupBox = new DzVGroupBox(oDialog);
+        var oSimulationGeneralCheckBox = new DzCheckBox(oSimulationGroupBox);
+        oSimulationGeneralCheckBox.text = 'Apply Simulation Change?';
+        oSimulationGeneralCheckBox.checked = false;
+        var oSimulationVisibilityLabel = new DzLabel(oSimulationGroupBox);
+        oSimulationVisibilityLabel.text = 'Visible In Simulation';
+        var oSimulationVisibilityCombo = new DzComboBox(oSimulationGroupBox);
+        oSimulationVisibilityCombo.addItem('OFF');
+        oSimulationVisibilityCombo.addItem('ON');
+
+
+        var oResultGroupBox = new DzVGroupBox(oDialog);
+        var oResultLogTextEdit = new DzTextEdit(oResultGroupBox);
+        oResultLogTextEdit.readOnly = true;
+        var sLogText = 'Nodes that will be converted:\n';
+        lNodeProperties.forEach(function(oNodeProperties){
+            var sRes = oNodeProperties.resolution.getItem(oNodeProperties.resolution.getValue());
+            var sViewSubD = oNodeProperties.viewSubdivision.getValue();
+            var sRenderSubD = oNodeProperties.renderSubdivision.getValue();
+            var sVisibleInSimulation = oNodeProperties.simulationVisibility.getValue()? 'ON':'OFF';
+            sLogText = sLogText + oNodeProperties.node.getLabel() +' ('+sRes+'/'+sViewSubD+'/'+sRenderSubD+'/'+sVisibleInSimulation+')'+ (!isSubDObject(oNodeProperties.node)?' [Will be converted to SubD]':'')+'\n';
+        });
+        oResultLogTextEdit.text = sLogText;
+
+        var oButtonGroupBox = new DzVGroupBox(oDialog);
+        oButtonGroupBox.columns = 2;
+        var oAcceptButton = new DzPushButton(oButtonGroupBox);
+        oAcceptButton.text = "Apply";
+        oAcceptButton.clicked.scriptConnect(function () {
+            var performChanges = false;
+            var performConversion = false;
+            var changeResolution = oResolutionGeneralCheckBox.checked;
+            var changeSubdivision = oSubdivisionGeneralCheckBox.checked;
+            var changeSimulation = oSimulationGeneralCheckBox.checked;
+
+            if(oConvertToSubDCheckBox.checked){
+                if(MessageBox.question('Convert all nodes to SubD? This cannot be undone', 'Confirm Convert to SubD', 'Yes', 'No') == 0){
+                    performConversion = true;
+                }
+            }
+            if(MessageBox.question('Apply these settings to all nodes in the scene?', 'Apply Resolution Changes', 'Yes', 'No') == 0){
+                performChanges = true;
+            }
+
+            beginUndo();
+            var previousSelection = Scene.getSelectedNodeList();
+            var oActionMgr = MainWindow.getActionMgr();
+            var oConvertToSubDAction = oActionMgr.findAction("DzSubDAction");
+            oResultLogTextEdit.text = oResultLogTextEdit.text + '------------------------\n';
+            if(performChanges||performConversion){
+                oResultLogTextEdit.text = oResultLogTextEdit.text + 'Converting nodes...\n';
+            } else {
+                oResultLogTextEdit.text = oResultLogTextEdit.text + 'No changes applied\n';
+            }
+            lNodeProperties.forEach(function(oNodeProperties){
+                if(performConversion && !isSubDObject(oNodeProperties.node) && oConvertToSubDCheckBox.checked){
+                    if(oConvertToSubDAction){
+                        replaceSelectedNodes([oNodeProperties.node]);
+                        oConvertToSubDAction.trigger();
+                        replaceSelectedNodes(previousSelection);
+                        oResultLogTextEdit.text = oResultLogTextEdit.text + oNodeProperties.node.getLabel() + ': converted to SubD\n';
+                    }
+                }
+                if(performChanges) {
+                    if(changeResolution){
+                        oNodeProperties.resolution.setValue(oResolutionComboBox.currentItem);
+                        oResultLogTextEdit.text = oResultLogTextEdit.text + oNodeProperties.node.getLabel() + ': set Resolution to ' + oResolutionComboBox.currentText + '\n';
+                    }
+                    if(changeSubdivision){
+                        oNodeProperties.viewSubdivision.setValue(oViewSubdivisionIntSlider.value);
+                        oResultLogTextEdit.text = oResultLogTextEdit.text + oNodeProperties.node.getLabel() + ': set View SubD to ' + oViewSubdivisionIntSlider.value + '\n';
+                        oNodeProperties.renderSubdivision.setValue(oRenderSubdivisionIntSlider.value);
+                        oResultLogTextEdit.text = oResultLogTextEdit.text + oNodeProperties.node.getLabel() + ': set Render SubD to ' + (oViewSubdivisionIntSlider.value + oRenderSubdivisionIntSlider.value) + '\n';
+                    }
+                    if(changeSimulation){
+                        oNodeProperties.simulationVisibility.setValue(oSimulationVisibilityCombo.currentItem==1);
+                        oResultLogTextEdit.text = oResultLogTextEdit.text + oNodeProperties.node.getLabel() + ': set Simulation Visibility to ' + oSimulationVisibilityCombo.currentText + '\n';
+                    }
+                }
+            });
+            acceptUndo('applied resolution to all nodes');
+        });
+        var oCancelButton = new DzPushButton(oButtonGroupBox);
+        oCancelButton.text = "Close";
+        oDialog.setRejectButton(oCancelButton);
+        oDialog.exec();
+    }
+    showDialog(collectNodeProperties(Scene.getNodeList()));
+
+})();
