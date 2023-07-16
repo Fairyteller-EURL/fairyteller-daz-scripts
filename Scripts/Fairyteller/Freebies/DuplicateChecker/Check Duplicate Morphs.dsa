@@ -1,0 +1,108 @@
+(function(){
+    var loadJSON = function(filepath){
+        print("trying to load file", filepath);
+        var file = new DzFile(filepath);
+        if ( file.open( DzFile.ReadOnly ) ) {
+            var json = "";
+            while ( ! file.eof() ) {
+                var lineOfFile = file.readLine();
+                json = json.concat(lineOfFile);
+            }
+            file.close();
+            file.deleteLater();
+            print("file loaded");
+            return JSON.parse(json);
+        } else {
+            print("not working!");
+        }
+        return null;
+    };
+    var uriToLocalFilename = function(url){
+        var localUri = new DzUri(url);
+        var result = localUri.toLocalFilename();
+        return result;
+    }
+    var filterAssets = function(filterProduct, filterAsset){
+        var oAssetMgr = App.getAssetMgr();
+        var lProductsContainer = oAssetMgr.getProducts();
+        var nContainerCount = lProductsContainer.getNumChildContainers();
+        var nFilteredAssetCount = 0;
+        var res = [];
+        for (var i = 0; i < nContainerCount; i++) {
+            var oContainer = lProductsContainer.getChildContainer(i);
+            var nProductCount = oContainer.getNumChildContainers();
+            for (var j = 0; j < nProductCount; j++) {
+                var oProduct = oContainer.getChildContainer(j);
+                if(oProduct.isInstalled && filterProduct(oProduct)){
+                    var lAssets = oProduct.getAssets();
+                    var nAssetCount = lAssets.length;
+                    for (var k = 0; k < nAssetCount; k++) {
+                        var oAsset = lAssets[k];
+                        if(filterAsset(oAsset)){
+                            nFilteredAssetCount++;
+                            res.push(oAsset);
+                        }
+                    }
+                }
+            }
+        }
+        return res;
+    }
+    var filterProduct = function(oProduct){
+        return true;
+    }
+    var filterAsset = function(oAsset){
+        return oAsset.contentType=='Actor/Character' && oAsset.assetName.toUpperCase().indexOf('DEV LOAD')>=0;
+    }
+    var assets = filterAssets(filterProduct, filterAsset).map(function(oAsset){
+       return {name: oAsset.assetName, contentType: oAsset.contentType, url: oAsset.url};
+    });
+    var pushModifier = function(modifiers, assetName, filename, modifier){
+        print("checking modifier for duplicate", modifier.id, "in", assetName, filename);
+        var duplicateIds = [];
+        var filtered = modifiers.filter(function(m){return m.id == modifier.id;});
+        if(filtered.length>0){
+            duplicateIds.push({id:modifier.id, filename: filename, conflicting: filtered.map(function(m){return m.filename;})});
+        } else {
+            modifiers.push({id:modifier.id, filename: filename});
+        }
+        if(duplicateIds.length>0){
+            return {duplicateIds: duplicateIds};
+        } else {
+            return null;
+        }
+    }
+    var reportDuplicates = function(duplicates){
+        for(var j = 0; i<duplicates.length;j++){
+            print("duplicate", "'"+duplicates[j].id+"'", "in", duplicates[j].filename, "conflicts with", JSON.stringify(duplicates[j].conflicting));
+        }
+    }
+    for(var i = 0; i<assets.length;i++){
+        print("asset", i, assets[i].contentType, assets[i].name, assets[i].url);
+        var asset = assets[i];
+        if(asset.name != 'Genesis 9 Dev Load.duf') {
+            continue;
+        }
+        var filepath = uriToLocalFilename(asset.url);
+        var json = loadJSON(filepath);
+        if(!json || !json.scene || !json.scene.nodes || !json.scene.nodes.length>0) {
+            continue;
+        }
+        print("using "+asset.name+" as base");
+        var baseNode = json.scene.nodes[0];
+        var baseNodeUrl = baseNode.url;
+        print("baseNodeUrl", baseNodeUrl);
+        var modifiers = [];
+        var duplicates = [];
+        if(json.scene.modifiers && json.scene.modifiers.length>0){
+            json.scene.modifiers.forEach(function(modifier){
+               var dups = pushModifier(modifiers, asset.name, baseNodeUrl, modifier);
+               if(dups){
+                   duplicates = duplicates.concat(dups.duplicateIds);
+               }
+            });
+        }
+        reportDuplicates(duplicates);
+    }
+
+})();
